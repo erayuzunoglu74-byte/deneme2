@@ -4,7 +4,7 @@
 #
 #  Taban     : Debian 12 "bookworm"  (32 bit desteği hâlâ var)
 #  Masaüstü  : XFCE, Windows 10/11 düzeninde (alt görev çubuğu + başlat menüsü)
-#  Kurulum   : Debian Installer (hafif, 256 MB RAM ile çalışır)
+#  Kurulum   : Calamares (grafik kurulum, VortexOS markalı; canlı CD veya Installer girişi)
 #  Dil       : Türkçe (TR klavye, İstanbul saati)
 #
 #  KULLANIM  (Debian 12 ya da Ubuntu 22.04/24.04 üzerinde, root ile):
@@ -14,13 +14,13 @@
 #
 #  İPUCU: Hata çıkarsa temiz bir Debian 12 sanal makinesinde deneyin.
 #  Gereksinim: ~25 GB boş disk, 4 GB RAM, internet, her ISO için 20-60 dk.
-#  Çıktı: ./output/vortexos-1.0-amd64.iso  ve  vortexos-1.0-i386.iso
+#  Çıktı: ./output/vortexos-1.0-beta-amd64.iso  ve  vortexos-1.0-beta-i386.iso
 # ======================================================================
 set -euo pipefail
 
 NAME="VortexOS"
 SLUG="vortexos"
-VERSION="1.0"
+VERSION="1.0-beta"
 DIST="${DIST:-bookworm}"
 TARGET="${1:-all}"
 BASE="$PWD"
@@ -59,6 +59,9 @@ build_one() {
   echo "################ $NAME $ARCH derleniyor ################"
   rm -rf "$W"; mkdir -p "$W"; cd "$W"
 
+  # Canlı sistem açılış parametreleri (varsayılan dil İngilizce, klavye Türkçe Q)
+  local LIVEAPPEND="boot=live components quiet locales=en_US.UTF-8 keyboard-layouts=tr timezone=Europe/Istanbul username=vortex hostname=$SLUG"
+
   lb config \
     --distribution "$DIST" \
     --architectures "$ARCH" \
@@ -70,13 +73,12 @@ build_one() {
     --apt-indices false \
     --memtest none \
     --chroot-squashfs-compression-type xz \
-    --debian-installer live \
-    --debian-installer-gui false \
+    --debian-installer none \
     --iso-application "$NAME" \
     --iso-volume "${NAME^^}" \
     --iso-publisher "$NAME Projesi" \
     --image-name "$SLUG-$VERSION" \
-    --bootappend-live "boot=live components quiet locales=tr_TR.UTF-8 keyboard-layouts=tr timezone=Europe/Istanbul username=vortex hostname=$SLUG"
+    --bootappend-live "$LIVEAPPEND"
 
   # ------------------------------------------------------------------
   # 1) PAKETLER  (öneriler kapalı, sadece gerekenler)
@@ -146,7 +148,37 @@ htop
 xdg-utils
 desktop-file-utils
 lsb-release
+# --- Calamares grafik kurulum programı (VortexOS markalı) ---
+calamares
+calamares-settings-debian
+qml-module-qtquick2
+os-prober
+rsync
+squashfs-tools
+parted
+gdisk
+cryptsetup
+lvm2
+ntfs-3g
+dosfstools
+e2fsprogs
+btrfs-progs
+xfsprogs
+mtools
+kpartx
+efibootmgr
+grub2-common
+grub-pc-bin
+# --- Araçlar (Utilities menüsü ve disk kontrolü) ---
+memtest86+
+smartmontools
 EOF
+
+  # amd64: UEFI önyükleme için ek paketler
+  if [ "$ARCH" = "amd64" ]; then
+    printf 'grub-efi-amd64-bin\ngrub-efi-amd64-signed\nshim-signed\n' \
+      > config/package-lists/$SLUG-efi.list.chroot
+  fi
 
   # ------------------------------------------------------------------
   # 2) Ayar dosyaları (yeni kullanıcıya /etc/skel ile kopyalanır)
@@ -157,6 +189,13 @@ EOF
            "$I/etc/default" "$I/etc/lightdm"
 
   make_wallpaper "$I/usr/share/backgrounds/vortexos.png"
+
+  # Calamares kurulum programı için logo ve karşılama görseli
+  mkdir -p "$I/usr/share/vortexos-brand"
+  convert -size 256x256 radial-gradient:'#8fe0ff-#0b4f9c' -swirl 250 \
+          "$I/usr/share/vortexos-brand/logo.png"
+  convert "$I/usr/share/backgrounds/vortexos.png" -resize 1280x720 \
+          "$I/usr/share/vortexos-brand/welcome.png"
 
   # Windows 10/11 tarzı alt görev çubuğu: Başlat | Görevler | ... | Tepsi | Ses | Saat
   cat > "$X/xfce4-panel.xml" <<'EOF'
@@ -253,25 +292,25 @@ set -e
 
 # --- Sistem adı ---
 cat > /etc/os-release <<OSR
-PRETTY_NAME="VortexOS 1.0"
+PRETTY_NAME="VortexOS 1.0 Beta"
 NAME="VortexOS"
 VERSION_ID="1.0"
-VERSION="1.0"
+VERSION="1.0 Beta"
 ID=vortexos
 ID_LIKE=debian
 OSR
-printf 'VortexOS 1.0 \\n \\l\n\n' > /etc/issue
-echo 'VortexOS 1.0' > /etc/issue.net
+printf 'VortexOS 1.0 Beta \\n \\l\n\n' > /etc/issue
+echo 'VortexOS 1.0 Beta' > /etc/issue.net
 
 # --- Sistem özellikleri / "Hakkında" ekranı / kurulu sistemin GRUB menüsü ---
 cat > /etc/lsb-release <<LSB
 DISTRIB_ID=VortexOS
-DISTRIB_RELEASE=1.0
+DISTRIB_RELEASE="1.0 Beta"
 DISTRIB_CODENAME=vortex
-DISTRIB_DESCRIPTION="VortexOS 1.0"
+DISTRIB_DESCRIPTION="VortexOS 1.0 Beta"
 LSB
-sed -i 's/^PRETTY_NAME=.*/PRETTY_NAME="VortexOS 1.0"/' /usr/lib/os-release 2>/dev/null || true
-printf '\nVortexOS 1.0 - Hizli, sade, her tik bir adim.\n\n' > /etc/motd
+sed -i 's/^PRETTY_NAME=.*/PRETTY_NAME="VortexOS 1.0 Beta"/' /usr/lib/os-release 2>/dev/null || true
+printf '\nVortexOS 1.0 Beta - Hizli, sade, her tik bir adim.\n\n' > /etc/motd
 mkdir -p /etc/default
 if [ -f /etc/default/grub ]; then
   sed -i '/^GRUB_DISTRIBUTOR=/d' /etc/default/grub
@@ -319,6 +358,192 @@ mkdir -p "$D"
 systemctl disable NetworkManager-wait-online.service 2>/dev/null || true
 systemctl disable apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true
 
+# --- Calamares (grafik kurulum) VortexOS markası ---
+for B in /etc/calamares/branding/vortexos /usr/share/calamares/branding/vortexos; do
+  mkdir -p "$B"
+  cat > "$B/branding.desc" <<'BRD'
+---
+componentName:  vortexos
+welcomeStyleCalamares: true
+welcomeExpandingLogo: true
+windowExpanding: normal
+windowSize: 800px,520px
+windowPlacement: center
+strings:
+    productName:         VortexOS GNU/Linux
+    shortProductName:    VortexOS
+    version:             1.0 Beta
+    shortVersion:        1.0 Beta
+    versionedName:       VortexOS GNU/Linux 1.0 Beta
+    shortVersionedName:  VortexOS 1.0 Beta
+    bootloaderEntryName: VortexOS
+    productUrl:          https://example.com/vortexos
+    supportUrl:          https://example.com/vortexos
+    knownIssuesUrl:      https://example.com/vortexos
+    releaseNotesUrl:     https://example.com/vortexos
+images:
+    productLogo:         "logo.png"
+    productIcon:         "logo.png"
+    productWelcome:      "welcome.png"
+slideshow:               "show.qml"
+style:
+    sidebarBackground:    "#0b1f3a"
+    sidebarText:          "#FFFFFF"
+    sidebarTextSelect:    "#2f86ff"
+    sidebarTextHighlight: "#1a4f9c"
+BRD
+  cp /usr/share/vortexos-brand/logo.png "$B/logo.png"
+  cp /usr/share/vortexos-brand/welcome.png "$B/welcome.png"
+  cat > "$B/show.qml" <<'QML'
+import QtQuick 2.0;
+import calamares.slideshow 1.0;
+
+Presentation {
+    id: presentation
+    Slide {
+        Rectangle { anchors.fill: parent; color: "#0b1f3a" }
+        Text {
+            anchors.centerIn: parent
+            text: "VortexOS kuruluyor...\nHızlı, sade, her şey bir tık uzakta."
+            color: "white"
+            font.pixelSize: 22
+            horizontalAlignment: Text.AlignHCenter
+        }
+    }
+}
+QML
+done
+
+# Calamares ayarları: marka VortexOS, canlı kullanıcı vortex silinsin,
+# eski PC'ler için RAM/disk şartları gevşetilsin
+if [ -f /etc/calamares/settings.conf ]; then
+  sed -i 's/^branding:.*/branding: vortexos/' /etc/calamares/settings.conf
+fi
+if [ -f /etc/calamares/modules/removeuser.conf ]; then
+  sed -i 's/^username:.*/username: vortex/' /etc/calamares/modules/removeuser.conf
+fi
+if [ -f /etc/calamares/modules/welcome.conf ]; then
+  sed -i -e 's/^\( *requiredRam:\).*/\1 0.4/' \
+         -e 's/^\( *requiredStorage:\).*/\1 4/' /etc/calamares/modules/welcome.conf
+fi
+
+if [ -f /etc/calamares/modules/users.conf ]; then
+  sed -i -e 's/^\( *\)allowWeakPasswords:.*/\1allowWeakPasswords: true/' \
+         -e 's/^\( *\)allowWeakPasswordsDefault:.*/\1allowWeakPasswordsDefault: true/' \
+         -e 's/^\( *\)minLength:.*/\1minLength: -1/' /etc/calamares/modules/users.conf
+fi
+
+# Masaüstü ve menüdeki kurulum kısayolu: "VortexOS'u Kur"
+rm -f /usr/share/applications/*install-debian*.desktop 2>/dev/null || true
+cat > /usr/share/applications/vortexos-install.desktop <<'DSK'
+[Desktop Entry]
+Type=Application
+Name=VortexOS 1.0 Beta Setup
+Name[tr]=VortexOS 1.0 Beta Kur
+Comment=Install VortexOS on this computer
+Comment[tr]=VortexOS'u bilgisayara kur
+Exec=sudo -E calamares
+Icon=system-software-install
+Terminal=false
+Categories=System;
+DSK
+
+# --- Canlı (live) oturum: kullanıcı vortex / şifre vortex + otomatik giriş ---
+# Bu servis SADECE canlı açılışta çalışır (kernel satırında boot=live varsa).
+# Diske kurulan sistemde otomatik giriş ve hazır kullanıcı OLMAZ:
+# kurulum normal şekilde kullanıcı adı + şifre sorar.
+mkdir -p /usr/local/sbin
+cat > /usr/local/sbin/vortexos-live-setup <<'VSETUP'
+#!/bin/sh
+if ! id vortex >/dev/null 2>&1; then
+  useradd -m -s /bin/bash vortex
+fi
+echo 'vortex:vortex' | chpasswd
+for g in sudo audio video plugdev netdev cdrom dialout floppy lpadmin scanner bluetooth; do
+  if getent group "$g" >/dev/null 2>&1; then usermod -aG "$g" vortex || true; fi
+done
+mkdir -p /etc/sudoers.d
+echo 'vortex ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/vortex
+chmod 440 /etc/sudoers.d/vortex
+mkdir -p /etc/lightdm/lightdm.conf.d
+printf '[Seat:*]\nautologin-user=vortex\nautologin-user-timeout=0\n' > /etc/lightdm/lightdm.conf.d/50-vortexos-live.conf
+mkdir -p /home/vortex/Desktop
+if grep -qw vortexos-installer /proc/cmdline; then
+  # "VortexOS Installer" seçildi: masaüstü simgeleri olmasın, kurulum ekranı açılsın
+  rm -rf /home/vortex/Desktop/* 2>/dev/null || true
+  mkdir -p /home/vortex/.config/autostart
+  cat > /home/vortex/.config/autostart/vortexos-installer.desktop <<'AUT'
+[Desktop Entry]
+Type=Application
+Name=VortexOS 1.0 Beta Setup
+Exec=sudo -E calamares
+Terminal=false
+AUT
+else
+  # Normal canlı oturum: masaüstünde kurulum simgesi
+  cp /usr/share/applications/vortexos-install.desktop /home/vortex/Desktop/
+  chmod +x /home/vortex/Desktop/vortexos-install.desktop
+fi
+chown -R vortex:vortex /home/vortex
+VSETUP
+chmod +x /usr/local/sbin/vortexos-live-setup
+cat > /etc/systemd/system/vortexos-live.service <<'VSVC'
+[Unit]
+Description=VortexOS canli oturum kullanicisi ve otomatik giris
+ConditionKernelCommandLine=boot=live
+After=live-config.service local-fs.target
+Before=display-manager.service lightdm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/vortexos-live-setup
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+VSVC
+mkdir -p /etc/systemd/system/multi-user.target.wants
+ln -sf /etc/systemd/system/vortexos-live.service /etc/systemd/system/multi-user.target.wants/vortexos-live.service
+
+# --- Kurulu sistem: şifre boşsa otomatik giriş, şifre varsa giriş ekranı ---
+# Bu servis canlı oturumda ÇALIŞMAZ (boot=live varsa atlanır), sadece diske kurulu sistemde.
+cat > /usr/local/sbin/vortexos-autologin-check <<'VAUTO'
+#!/bin/sh
+CONF=/etc/lightdm/lightdm.conf.d/60-vortexos-autologin.conf
+# Kurulumda oluşturulan ilk normal kullanıcı
+U=$(awk -F: '$3>=1000 && $3<60000 {print $1; exit}' /etc/passwd)
+[ -n "$U" ] || exit 0
+H=$(awk -F: -v u="$U" '$1==u {print $2}' /etc/shadow)
+case "$H" in
+  ""|"!"|"*"|"!*")
+    # Şifre koyulmamış: giriş ekranı olmadan masaüstü açılsın
+    mkdir -p /etc/lightdm/lightdm.conf.d
+    printf '[Seat:*]\nautologin-user=%s\nautologin-user-timeout=0\n' "$U" > "$CONF"
+    ;;
+  *)
+    # Şifre var: giriş ekranı gelsin, doğru şifre girilince açılsın
+    rm -f "$CONF"
+    ;;
+esac
+VAUTO
+chmod +x /usr/local/sbin/vortexos-autologin-check
+cat > /etc/systemd/system/vortexos-autologin.service <<'VAUS'
+[Unit]
+Description=VortexOS kurulu sistem otomatik giris denetimi
+ConditionKernelCommandLine=!boot=live
+After=local-fs.target
+Before=display-manager.service lightdm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/vortexos-autologin-check
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+VAUS
+ln -sf /etc/systemd/system/vortexos-autologin.service /etc/systemd/system/multi-user.target.wants/vortexos-autologin.service
+
 # --- ISO boyutunu küçült ---
 find /usr/share/locale -mindepth 1 -maxdepth 1 \
      ! -name 'tr*' ! -name 'en*' ! -name 'locale.alias' -exec rm -rf {} + 2>/dev/null || true
@@ -335,33 +560,122 @@ HOOK
   mkdir -p config/hooks/normal
   cat > config/hooks/normal/9000-vortexos-boot.hook.binary <<'BHOOK'
 #!/bin/bash
-# Çalışma klasörü live-build sürümüne göre değişebilir; "binary" ağacını bul
+# live-build çalışma klasörü sürüme göre değişebilir; "binary" ağacını bul
 ROOT=""
 for D in binary . ..; do
   if [ -d "$D/isolinux" ] || [ -d "$D/boot/grub" ]; then ROOT="$D"; break; fi
 done
 [ -n "$ROOT" ] || { echo "VortexOS: ikili ağaç bulunamadı, menü atlandı"; exit 0; }
+ARCH="__ARCH__"
+APPEND="__APPEND__"
 
-# Menü yazıları: Debian / Live system -> VortexOS
+# Menü yazılarında Debian / Live system yerine VortexOS
 for F in "$ROOT"/isolinux/*.cfg "$ROOT"/syslinux/*.cfg "$ROOT"/boot/grub/*.cfg "$ROOT"/EFI/boot/*.cfg; do
   [ -f "$F" ] || continue
   sed -i \
     -e 's/Debian GNU\/Linux/VortexOS/g' \
     -e 's/Debian Live/VortexOS Live/g' \
-    -e 's/Live system/VortexOS Live/g' \
-    -e 's/Debian Installer/VortexOS Kurulum/g' \
+    -e 's/Live system/VortexOS Live CD/g' \
     -e 's/Debian/VortexOS/g' "$F"
 done
 
-# Açılış arka planı: VortexOS duvar kağıdı (640x480)
+# Memtest86+ varsa ISO'ya kopyala (Utilities menüsü için)
+MEMT=""
+if [ "$ARCH" = "amd64" ]; then NAMES="memtest86+x64.bin memtest86+ia32.bin memtest86+.bin"; else NAMES="memtest86+ia32.bin memtest86+.bin"; fi
+for C in chroot "$ROOT/../chroot" ../chroot; do
+  [ -d "$C/boot" ] || continue
+  for N in $NAMES; do
+    if [ -f "$C/boot/$N" ]; then
+      mkdir -p "$ROOT/live"
+      cp "$C/boot/$N" "$ROOT/live/memtest.bin"
+      MEMT=/live/memtest.bin
+      break 2
+    fi
+  done
+done
+
+# BIOS (syslinux) menüsü
+if [ -d "$ROOT/isolinux" ]; then
+  cat > "$ROOT/isolinux/live.cfg" <<LCFG
+label live
+  menu label ^VortexOS Live CD ($ARCH)
+  menu default
+  linux /live/vmlinuz
+  initrd /live/initrd.img
+  append $APPEND
+
+label command
+  menu label VortexOS Live CD ^Command ($ARCH)
+  linux /live/vmlinuz
+  initrd /live/initrd.img
+  append $APPEND systemd.unit=multi-user.target
+
+label installer
+  menu label VortexOS ^Installer
+  linux /live/vmlinuz
+  initrd /live/initrd.img
+  append $APPEND vortexos-installer
+
+menu begin advanced
+  menu title Advanced options
+  label mainmenu
+    menu label ^Back..
+    menu exit
+  label failsafe
+    menu label VortexOS Live CD ($ARCH fail-safe mode)
+    linux /live/vmlinuz
+    initrd /live/initrd.img
+    append boot=live components nomodeset noapic noapm nodma nomce nolapic nosmp nosplash locales=en_US.UTF-8 keyboard-layouts=tr timezone=Europe/Istanbul username=vortex hostname=vortexos
+  label toram
+    menu label VortexOS Live CD ($ARCH, copy to RAM)
+    linux /live/vmlinuz
+    initrd /live/initrd.img
+    append $APPEND toram
+menu end
+LCFG
+  if [ -n "$MEMT" ]; then
+    cat >> "$ROOT/isolinux/live.cfg" <<MCFG
+
+menu begin utilities
+  menu title Utilities
+  label mainmenu
+    menu label ^Back..
+    menu exit
+  label memtest
+    menu label ^Memory test (Memtest86+)
+    linux $MEMT
+menu end
+MCFG
+  fi
+fi
+
+# UEFI (GRUB) menüsü: mevcut girişlerin yanına ekle
+if [ -f "$ROOT/boot/grub/grub.cfg" ]; then
+  cat >> "$ROOT/boot/grub/grub.cfg" <<GCFG
+
+menuentry "VortexOS Live CD Command ($ARCH)" {
+  linux /live/vmlinuz $APPEND systemd.unit=multi-user.target
+  initrd /live/initrd.img
+}
+
+menuentry "VortexOS Installer" {
+  linux /live/vmlinuz $APPEND vortexos-installer
+  initrd /live/initrd.img
+}
+GCFG
+fi
+
+# Açılış arka planı: VortexOS duvar kağıdı, 640x480'e orantılı kırpılır (bozuk görünmesin)
 for S in "$ROOT"/isolinux/splash.png "$ROOT"/boot/grub/splash.png; do
   if [ -f "$S" ]; then
-    convert "__WALL__" -resize 640x480! "$S" 2>/dev/null || true
+    convert "__WALL__" -resize 640x480^ -gravity center -extent 640x480 "$S" 2>/dev/null || true
   fi
 done
 exit 0
 BHOOK
-  sed -i "s|__WALL__|$PWD/config/includes.chroot/usr/share/backgrounds/vortexos.png|" \
+  sed -i -e "s|__WALL__|$PWD/config/includes.chroot/usr/share/backgrounds/vortexos.png|" \
+         -e "s|__ARCH__|$ARCH|g" \
+         -e "s|__APPEND__|$LIVEAPPEND|g" \
       config/hooks/normal/9000-vortexos-boot.hook.binary
   chmod +x config/hooks/normal/9000-vortexos-boot.hook.binary
 
